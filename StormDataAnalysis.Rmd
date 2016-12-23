@@ -1,0 +1,148 @@
+---
+title: "Weather Events Adverse Population and Economic Costs"
+author: "Clifford Miller"
+date: "12/20/2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Synopsis
+This is a study to determine the most harmful weather events in respects to U.S. population health and economic impact.  The data used in this study ranged from the year 1950 through November 2011.  The data was provided by the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database.  We studied the effects of various weather events and determined that tornados far exceed all other weather events in both fatalities and injuries.  It was also determined that floods cause the greatest property damage and that drought causes the most crop damage based on economic cost.  When combining total cost of both property damage and crop damage it was determined that floods cause the most adverse economic impact.
+
+## Data Processing
+The data is downloaded from the web as a compressed csv.  It was compressed using the bzip2 algorithm.  R handles the decompression and loading of the data.  Here we download the file and read it into R so that we can begin processing the data.
+```{r cache=TRUE}
+compressedDataURL <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+destFileName <- "stormData.csv.bz2"
+download.file(compressedDataURL, destfile = destFileName, method = "curl")
+
+stormData <- read.csv(destFileName)
+```
+The data contains 902297 observations and 37 variables.  All variables are not necessary to conduct the desired study.
+```{r}
+str(stormData)
+```
+The data contains many more variables than we need for this analysis.  Here we subset the data to only include the variables required for our analysis.  We are only interested in determining the effects to population and economic impacts by event types.  So it is sufficient to reduce the data to a subset contianing all observations with only the *FATALITIES*, *INJURIES*, *PROPDMG*, *PROPDMGEXP*, *CROPDMG*, and *CROPDMGEXP*.
+
+```{r}
+usefulData <- subset(stormData, select = c('EVTYPE', 'FATALITIES', 'INJURIES', 'PROPDMG', 'PROPDMGEXP', 
+                         'CROPDMG', 'CROPDMGEXP'))
+```
+
+The data set has been reduced to a smaller more managable set.  The data still contains 902297 observations but only the 7 variables required for the analysis remain.
+```{r}
+str(usefulData)
+```
+
+Creating a vector to represent key value pairs for exponents.  We use the string "empty" to represent "" (empty string).  This will provide a lookup for determining the appropriate exponent to use during cost calculations.  See that the new calculated costs 
+```{r cache=TRUE}
+exponentList <- c(0,0,0,0,0,1,2,3,4,5,6,7,8,9,2,3,6)
+names(exponentList) <- c("empty","-", "?", "+", "0", "1", "2", "3", "4", "5", "6", "7", "8", "B", "H", "K", "M")
+
+exponentList
+```
+
+The total costs are now calculated for both property and crop damage by multiplying the respective damage value with the associated exponent value.  Notice that the calculated costs have been added to the data set.
+
+```{r cache=TRUE}
+options(scipen = 999)
+
+# add column to normalize property damage costs.  
+usefulData$PROPDMG_COST <- usefulData$PROPDMG * sapply(toupper(usefulData$PROPDMGEXP), function(x) { if("" == x){x = "empty"}; 10^exponentList[x]})
+
+# add column to normalize crop damage costs.  
+usefulData$CROPDMG_COST <- usefulData$CROPDMG * sapply(toupper(usefulData$CROPDMGEXP), function(x) { if("" == x){x = "empty"}; 10^exponentList[x]})
+
+str(usefulData)
+```
+
+The data needs to be aggregated into a summary of the observations needed for the analysis.  The required analysis needs the event type, total values for fatalities and injuries, as well as the previously calculated cost variables.  This tidy data set will be used for all analysis and reporting.  Notice the data set has been reduced to 985 observations (one observation per EVTYPE) and 5 variables.
+
+```{r cache=TRUE}
+
+# total the fatality data
+fatalityData <- aggregate(FATALITIES ~ EVTYPE, data = usefulData, sum)
+
+#total the injury data
+injuryData <- aggregate(INJURIES ~ EVTYPE, data = usefulData, sum)
+
+#total the property cost data
+propertyCostData <- aggregate(PROPDMG_COST ~ EVTYPE, data = usefulData, sum)
+
+#total the cost data
+cropCostData <- aggregate(CROPDMG_COST ~ EVTYPE, data = usefulData, sum)
+
+#merge the cost data 
+combinedCostData <- merge(propertyCostData, cropCostData, by = "EVTYPE")
+
+#merge the population based data
+combinedHumanLossData <- merge(fatalityData, injuryData, by = "EVTYPE")
+
+#merge the population based data and the economic cost data
+tidyData <- merge(combinedHumanLossData, combinedCostData, by = "EVTYPE")
+
+str(tidyData)
+
+```
+## Results
+```{r}
+
+library(ggplot2)
+library(gridExtra)
+
+numberOfPlottedItems <- 10
+
+injuryPlot <- ggplot(head(tidyData[order(-tidyData$INJURIES),], numberOfPlottedItems), aes(x = reorder(EVTYPE, INJURIES), y = INJURIES)) +
+  coord_flip() + 
+  geom_bar(stat = "identity", fill = "darkblue") + 
+  ylab("Total Injuries") + 
+  xlab("Event Type") 
+
+fatalityPlot <- ggplot(head(tidyData[order(-tidyData$FATALITIES),], numberOfPlottedItems), aes(x = reorder(EVTYPE, FATALITIES), y = FATALITIES)) +
+  coord_flip() + 
+  geom_bar(stat = "identity", fill = "darkgreen") + 
+  ylab("Total Fatalities") + 
+  xlab("Event Type") 
+
+grid.arrange(injuryPlot, fatalityPlot, top = "Population Impact of Weather Events", nrow = 2, ncol = 1)
+```
+
+
+```{r}
+options(scipen = 999)
+
+numberOfPlottedItems <- 10
+
+propertyDmgPlot <- ggplot(head(tidyData[order(-tidyData$PROPDMG_COST),], numberOfPlottedItems), aes(x = reorder(EVTYPE, PROPDMG_COST), y = PROPDMG_COST)) +
+  coord_flip() + 
+  geom_bar(stat = "identity", fill = "darkblue") + 
+  ylab("Total Property Damage") + 
+  xlab("Event Type") 
+
+cropDmgPlot <- ggplot(head(tidyData[order(-tidyData$CROPDMG_COST),], numberOfPlottedItems), aes(x = reorder(EVTYPE, CROPDMG_COST), y = CROPDMG_COST)) +
+  coord_flip() + 
+  geom_bar(stat = "identity", fill = "darkgreen") + 
+  ylab("Total Crop Damage") + 
+  xlab("Event Type") 
+
+grid.arrange(propertyDmgPlot, cropDmgPlot, top = "Economic Impact of Weather Events", nrow = 2, ncol = 1)
+```
+
+```{r}
+options(scipen = 999)
+
+tidyData$TOTALDMG_COST <- tidyData$PROPDMG_COST +tidyData$CROPDMG_COST
+
+head(tidyData[,4:6], 100)
+
+ggplot(head(tidyData[order(-tidyData$TOTALDMG_COST),], numberOfPlottedItems), aes(x = reorder(EVTYPE, TOTALDMG_COST), y = TOTALDMG_COST)) +
+  coord_flip() + 
+  geom_bar(stat = "identity", fill = "red") + 
+  ylab("Total Economic Impact (property and crop damage combined)") + 
+  xlab("Event Type") 
+
+head(tidyData[order(-tidyData$TOTALDMG_COST),])
+```
