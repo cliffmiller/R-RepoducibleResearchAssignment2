@@ -1,5 +1,5 @@
 ---
-title: "Weather Events Adverse Population and Economic Costs"
+title: "Adverse Population and Economic Costs of Weather Events"
 author: "Clifford Miller"
 date: "12/20/2016"
 output: html_document
