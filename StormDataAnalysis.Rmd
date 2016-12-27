@@ -37,7 +37,7 @@ The data set has been reduced to a smaller more managable set.  The data still c
 str(usefulData)
 ```
 
-Creating a vector to represent key value pairs for exponents.  We use the string "empty" to represent "" (empty string).  This will provide a lookup for determining the appropriate exponent to use during cost calculations.  See that the new calculated costs 
+Creating a vector to represent key value pairs for exponents.  We use the string "empty" to represent "" (empty string).  This will provide a lookup for determining the appropriate exponent to use during cost calculations.   
 ```{r cache=TRUE}
 exponentList <- c(0,0,0,0,0,1,2,3,4,5,6,7,8,9,2,3,6)
 names(exponentList) <- c("empty","-", "?", "+", "0", "1", "2", "3", "4", "5", "6", "7", "8", "B", "H", "K", "M")
@@ -45,7 +45,7 @@ names(exponentList) <- c("empty","-", "?", "+", "0", "1", "2", "3", "4", "5", "6
 exponentList
 ```
 
-The total costs are now calculated for both property and crop damage by multiplying the respective damage value with the associated exponent value.  Notice that the calculated costs have been added to the data set.
+The total costs are now calculated for both property and crop damage utilizing the respective damage value and the associated exponent value.  Notice that the calculated costs have been added to the data set.
 
 ```{r cache=TRUE}
 options(scipen = 999)
@@ -59,7 +59,7 @@ usefulData$CROPDMG_COST <- usefulData$CROPDMG * sapply(toupper(usefulData$CROPDM
 str(usefulData)
 ```
 
-The data needs to be aggregated into a summary of the observations needed for the analysis.  The required analysis needs the event type, total values for fatalities and injuries, as well as the previously calculated cost variables.  This tidy data set will be used for all analysis and reporting.  Notice the data set has been reduced to 985 observations (one observation per EVTYPE) and 5 variables.
+The data is aggregated into a summary of the observations needed for the analysis.  The required analysis needs the event type, total values for fatalities and injuries, the total of the previously calculated cost variables, as well as the computed total economic impact.  This tidy data set will be used for all analysis and reporting.  Notice the data set has been reduced to 985 observations (one observation per EVTYPE) and 6 variables.
 
 ```{r cache=TRUE}
 
@@ -84,10 +84,17 @@ combinedHumanLossData <- merge(fatalityData, injuryData, by = "EVTYPE")
 #merge the population based data and the economic cost data
 tidyData <- merge(combinedHumanLossData, combinedCostData, by = "EVTYPE")
 
+# add variable to support analysis of total economic impact
+tidyData$TOTALDMG_COST <- tidyData$PROPDMG_COST +tidyData$CROPDMG_COST
+
 str(tidyData)
 
 ```
 ## Results
+
+### Popluation Based Impact
+
+The following graphs indicate that Tornados have to largest impact on population when it comes to both injuries and fatalities.  
 ```{r}
 
 library(ggplot2)
@@ -110,6 +117,9 @@ fatalityPlot <- ggplot(head(tidyData[order(-tidyData$FATALITIES),], numberOfPlot
 grid.arrange(injuryPlot, fatalityPlot, top = "Population Impact of Weather Events", nrow = 2, ncol = 1)
 ```
 
+### Economic Impact
+
+The following graphs indicate that floods cause the most property damage while drought causes the most crop damage.
 
 ```{r}
 options(scipen = 999)
@@ -131,12 +141,9 @@ cropDmgPlot <- ggplot(head(tidyData[order(-tidyData$CROPDMG_COST),], numberOfPlo
 grid.arrange(propertyDmgPlot, cropDmgPlot, top = "Economic Impact of Weather Events", nrow = 2, ncol = 1)
 ```
 
+Floods have the largest negative economic impact when property damage and crop damage impacts are combined.
+
 ```{r}
-options(scipen = 999)
-
-tidyData$TOTALDMG_COST <- tidyData$PROPDMG_COST +tidyData$CROPDMG_COST
-
-head(tidyData[,4:6], 100)
 
 ggplot(head(tidyData[order(-tidyData$TOTALDMG_COST),], numberOfPlottedItems), aes(x = reorder(EVTYPE, TOTALDMG_COST), y = TOTALDMG_COST)) +
   coord_flip() + 
@@ -144,5 +151,4 @@ ggplot(head(tidyData[order(-tidyData$TOTALDMG_COST),], numberOfPlottedItems), ae
   ylab("Total Economic Impact (property and crop damage combined)") + 
   xlab("Event Type") 
 
-head(tidyData[order(-tidyData$TOTALDMG_COST),])
 ```
